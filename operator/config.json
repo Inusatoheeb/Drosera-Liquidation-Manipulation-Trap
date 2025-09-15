@@ -1,0 +1,10 @@
+{
+  "provider": "http://127.0.0.1:8545",
+  "baitResponseAddress": "0xBA1BA1BA1BA1BA1BA1BA1BA1BA1BA1BA1BA1BA1",
+  "minValueWei": "100000000000000000000",
+  "minBorrowAmountWei": "50000000000000000000",
+  "operatorPrivateKey": "0xYOUR_PRIVATE_KEY",
+  "lendingPools": [
+    "0x0000000000000000000000000000000000000000"
+  ]
+}

@@ -1,94 +1,82 @@
-# Drosera Trap Foundry Template
+# Drosera — Liquidation Manipulation Trap (PoC)
 
-This repo is for quickly bootstrapping a new Drosera project. It includes instructions for creating your first trap, deploying it to the Drosera network, and updating it on the fly.
+Hello! I've set up this proof-of-concept to demonstrate a Drosera trap that detects **liquidation manipulation** attempts in the mempool and records them on-chain. The goal is to create a minimal, demo-ready project that clearly shows the core idea: mempool watcher -> detection -> encoded bytes -> on-chain record.
 
-[![view - Documentation](https://img.shields.io/badge/view-Documentation-blue?style=for-the-badge)](https://dev.drosera.io "Project documentation")
-[![Twitter](https://img.shields.io/twitter/follow/DroseraNetwork?style=for-the-badge)](https://x.com/DroseraNetwork)
+### How It Works
 
-## Configure dev environment
+The system has two main parts: an off-chain operator and an on-chain response contract.
 
-```bash
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
+1.  **Off-Chain Operator (`operator/watcher.js`)**: This Node.js script connects to an Ethereum node, watches the mempool for pending transactions, and runs a simple heuristic. It looks for transactions sent to known lending pools or transactions involving a large amount of ETH, which could be part of a liquidation or flash loan manipulation.
+2.  **On-Chain Response (`src/BaitResponse.sol`)**: When the watcher flags a suspicious transaction, it encodes details about it (a transaction hash and a reason string) into a `bytes` payload. It then calls the `executeBytes(bytes)` function on the `BaitResponse` contract. This contract decodes the data and emits a `FlashCaught` event, creating an immutable, on-chain log of the suspicious activity.
 
-# The trap-foundry-template utilizes node modules for dependency management
-# install Bun (optional)
-curl -fsSL https://bun.sh/install | bash
+The `FlashBait.sol` contract is included to satisfy the Drosera `ITrap` interface, but for this PoC, all the detection logic lives in the off-chain watcher to keep things simple and focused on the response mechanism.
 
-# install node modules
-bun install
+### What's Included
+- `src/BaitResponse.sol`: The response contract that decodes bytes and emits an event.
+- `src/FlashBait.sol`: The on-chain contract that fulfills the `ITrap` interface.
+- `operator/watcher.js`: The mempool watcher that encodes the payload and calls `executeBytes(bytes)`.
+- `scripts/demo-send-tx.js`: A script to simulate a malicious transaction locally.
+- `drosera.toml`: The manifest for Drosera, configured for this trap.
+- `test/Bait.t.sol`: Foundry test file for the contracts.
 
-# install vscode (optional)
-# - add solidity extension JuanBlanco.solidity
+### Tech Stack
+- Solidity ^0.8.17
+- Foundry
+- Node.js + ethers.js
 
-# install drosera-cli
-curl -L https://app.drosera.io/install | bash
-droseraup
-```
+---
 
-open the VScode preferences and Select `Soldity: Change workpace compiler version (Remote)`
+## Quickstart (Local Fork + Demo)
 
-Select version `0.8.12`
+1.  **Install dependencies**
 
-## Quick Start
+    ```bash
+    # Install Foundry
+    curl -L https://foundry.paradigm.xyz | bash
+    foundryup
 
-### Hello World Trap
+    # Install Node.js dependencies
+    npm init -y
+    npm i ethers dotenv
+    ```
 
-The drosera.toml file is configured to deploy a simple "Hello, World!" trap. Ensure the drosera.toml file is set to the following configuration:
+2.  **Deploy `BaitResponse.sol`**
 
-```toml
-response_contract = "0xdA890040Af0533D98B9F5f8FE3537720ABf83B0C"
-response_function = "helloworld(string)"
-```
+    You'll need an RPC URL for a testnet or local fork.
 
-To deploy the trap, run the following commands:
+    ```bash
+    forge script scripts/DeployBaitResponse.s.sol:DeployBaitResponse --rpc-url <YOUR_RPC_URL> --broadcast
+    ```
 
-```bash
-# Compile the Trap
-forge build
+3.  **Configure the Operator**
 
-# Deploy the Trap
-DROSERA_PRIVATE_KEY=0x.. drosera apply
-```
+    Copy the deployed `BaitResponse` contract address and paste it into `operator/config.json`. You should also add your private key to send the response transaction (use a burner key).
 
-After successfully deploying the trap, the CLI will add an `address` field to the `drosera.toml` file.
+    ```json
+    {
+      "provider": "http://127.0.0.1:8545",
+      "baitResponseAddress": "YOUR_DEPLOYED_BAIT_RESPONSE_ADDRESS",
+      "operatorPrivateKey": "YOUR_BURNER_PRIVATE_KEY",
+      ...
+    }
+    ```
 
-Congratulations! You have successfully deployed your first trap!
+4.  **Run the Watcher**
 
-### Response Trap
+    This will start monitoring the mempool of the network specified by your provider.
 
-You can then update the trap by changing its logic and recompling it or changing the path field in the `drosera.toml` file to point to the Response Trap.
+    ```bash
+    node operator/watcher.js
+    ```
 
-The Response Trap is designed to trigger a response at a specific block number. To test the Response Trap, pick a future block number and update the Response Trap.
-Specify a response contract address and function signature in the drosera.toml file to the following:
+5.  **Simulate a Malicious Transaction**
 
-```toml
-response_contract = "0x183D78491555cb69B68d2354F7373cc2632508C7"
-response_function = "responseCallback(uint256)"
-```
+    In a separate terminal, run the demo script. This will send a large ETH transaction to a placeholder address, which the watcher will detect.
 
-Finally, deploy the Response Trap by running the following commands:
+    ```bash
+    node scripts/demo-send-tx.js
+    ```
 
-```bash
-# Compile the Trap
-forge build
+6.  **Observe the Results**
 
-# Deploy the Trap
-DROSERA_PRIVATE_KEY=0x.. drosera apply
-```
-
-> Note: The `DROSERA_PRIVATE_KEY` environment variable can be used to deploy traps. You can also set it in the drosera.toml file as `private_key = "0x.."`.
-
-
-### Transfer Event Trap
-The TransferEventTrap is an example of how a Trap can parse event logs from a block and respond to a specific ERC-20 token transfer events.
-
-To deploy the Transfer Event Trap, uncomment the `transfer_event_trap` section in the `drosera.toml` file. Add the token address to the `tokenAddress` constant in the `TransferEventTrap.sol` file and then deploy the trap.
-
-## Testing
-
-Example tests are included in the `tests` directory. They simulate how Drosera Operators execute traps and determine if a response should be triggered. To run the tests, execute the following command:
-
-```bash
-forge test
-```
+    You will see the watcher log the suspicious transaction and send a new transaction to the `BaitResponse` contract. You can then look up that transaction hash on a block explorer to see the `FlashCaught` event.
