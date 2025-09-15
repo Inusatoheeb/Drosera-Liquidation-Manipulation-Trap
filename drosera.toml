@@ -1,4 +1,11 @@
-# drosera.toml
+ethereum_rpc = "HOODI_RPC
+drosera_rpc = "https://relay.hoodi.drosera.io"
+eth_chain_id = 560048
+drosera_address = "0x91cB447BaFc6e0EA0F4Fe056F5a9b1F14bb06e5D"
+
+[traps]
+
+[traps.LqManipulationTrap]
 trap_name = "Drosera Liquidation Manipulation Trap"
 path = "out/FlashBait.sol/FlashBait.json"
 address = "0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF" # optional placeholder
