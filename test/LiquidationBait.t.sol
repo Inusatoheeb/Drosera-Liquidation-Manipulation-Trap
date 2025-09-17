@@ -2,36 +2,32 @@
 pragma solidity ^0.8.17;
 
 import "forge-std/Test.sol";
-import "../src/BaitResponse.sol";
+import "../src/LiquidationGuard.sol";
 import "../src/FlashBait.sol";
+import "./mocks/MockLendingPool.sol";
+import "./mocks/MockERC20.sol";
 
 contract BaitTest is Test {
-    BaitResponse public baitResponse;
+    LiquidationGuard public liquidationGuard;
     FlashBait public flashBait;
+    MockLendingPool public mockLendingPool;
+    MockERC20 public mockDebtToken;
 
     function setUp() public {
-        baitResponse = new BaitResponse();
+        mockLendingPool = new MockLendingPool();
+        mockDebtToken = new MockERC20();
+        liquidationGuard = new LiquidationGuard(address(mockLendingPool), address(mockDebtToken));
         flashBait = new FlashBait();
     }
 
     function testOwner() public {
-        assertEq(baitResponse.owner(), address(this));
+        assertEq(liquidationGuard.owner(), address(this));
     }
 
     function testSetOwner() public {
         address newOwner = address(0x123);
-        baitResponse.setOwner(newOwner);
-        assertEq(baitResponse.owner(), newOwner);
-    }
-
-    function testExecuteBytes() public {
-        bytes32 txHash = keccak256("test tx");
-        string memory reason = "test reason";
-        bytes memory data = abi.encode(txHash, reason);
-
-        vm.expectEmit(true, true, true, true);
-        emit BaitResponse.FlashCaught(address(this), txHash, reason, block.timestamp);
-        baitResponse.executeBytes(data);
+        liquidationGuard.setOwner(newOwner);
+        assertEq(liquidationGuard.owner(), newOwner);
     }
 
     function testFlashBaitNoLogic() public {
