@@ -6,19 +6,24 @@ import "./interfaces/ILendingPool.sol";
 
 contract LiquidationGuard {
     address public owner;
+    address public authorizedCaller; // TrapConfig or operator registry
     ILendingPool public lendingPool;
     IERC20 public debtToken;
 
     event DefenseAttempted(
-        address indexed reporter,
+        address indexed caller,
         address indexed collateral,
         address indexed user,
-        uint256 debtToCover,
-        uint256 timestamp
+        uint256 debtToCover
     );
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    modifier onlyAuthorized() {
+        require(msg.sender == authorizedCaller, "Not authorized");
         _;
     }
 
@@ -28,8 +33,12 @@ contract LiquidationGuard {
         debtToken = IERC20(_debtToken);
     }
 
+    function setAuthorizedCaller(address who) external onlyOwner {
+        authorizedCaller = who;
+    }
+
     // Generic entrypoint Drosera expects: accepts bytes and acts on them.
-    function executeBytes(bytes calldata data) external {
+    function executeBytes(bytes calldata data) external onlyAuthorized {
         (address collateral, address user, uint256 debtToCover) = abi.decode(
             data,
             (address, address, uint256)
@@ -47,8 +56,7 @@ contract LiquidationGuard {
             msg.sender,
             collateral,
             user,
-            debtToCover,
-            block.timestamp
+            debtToCover
         );
         // In a real implementation, this function would contain logic
         // to mitigate the attack, e.g., by approving the lending pool

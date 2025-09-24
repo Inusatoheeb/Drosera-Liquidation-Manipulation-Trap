@@ -8,35 +8,62 @@ import "./mocks/MockLendingPool.sol";
 import "./mocks/MockERC20.sol";
 
 contract BaitTest is Test {
-    LiquidationGuard public liquidationGuard;
-    FlashBait public flashBait;
+    LiquidationBait public liquidationBait;
     MockLendingPool public mockLendingPool;
-    MockERC20 public mockDebtToken;
+    address public userToMonitor = address(0xABC);
+    address public collateral = address(0xDEF);
 
     function setUp() public {
         mockLendingPool = new MockLendingPool();
-        mockDebtToken = new MockERC20();
-        liquidationGuard = new LiquidationGuard(address(mockLendingPool), address(mockDebtToken));
-        flashBait = new FlashBait();
+        liquidationBait = new LiquidationBait(address(mockLendingPool), collateral, userToMonitor);
     }
 
-    function testOwner() public {
-        assertEq(liquidationGuard.owner(), address(this));
+    function testSetTarget() public {
+        address newUser = address(0x123);
+        liquidationBait.setTarget(newUser);
+        assertEq(liquidationBait.userToMonitor(), newUser);
     }
 
-    function testSetOwner() public {
-        address newOwner = address(0x123);
-        liquidationGuard.setOwner(newOwner);
-        assertEq(liquidationGuard.owner(), newOwner);
+    function testCollect() public {
+        uint256 expectedHealthFactor = 1.5e18;
+        uint256 expectedDebt = 50e18;
+        mockLendingPool.setUserAccountData(userToMonitor, 0, expectedDebt, 0, 0, 0, expectedHealthFactor);
+
+        bytes memory data = liquidationBait.collect();
+        (uint256 healthFactor, uint256 totalDebtETH, address col, address user) = abi.decode(data, (uint256, uint256, address, address));
+
+        assertEq(healthFactor, expectedHealthFactor);
+        assertEq(totalDebtETH, expectedDebt);
+        assertEq(col, collateral);
+        assertEq(user, userToMonitor);
     }
 
-    function testFlashBaitNoLogic() public {
-        // Test that the placeholder functions can be called without reverting
-        bytes memory collectData = flashBait.collect();
-        assertTrue(collectData.length == 0);
+    function testShouldRespond_true() public {
+        uint256 healthFactor = 0.9e18; // Below threshold
+        uint256 debt = 100e18;
+        bytes memory collectedData = abi.encode(healthFactor, debt, collateral, userToMonitor);
+        bytes[] memory data = new bytes[](1);
+        data[0] = collectedData;
 
-        bytes[] memory data;
-        (bool should, bytes memory response) = flashBait.shouldRespond(data);
+        (bool should, bytes memory response) = liquidationBait.shouldRespond(data);
+
+        assertTrue(should);
+
+        (address respCollateral, address respUser, uint256 respDebt) = abi.decode(response, (address, address, uint256));
+        assertEq(respCollateral, collateral);
+        assertEq(respUser, userToMonitor);
+        assertEq(respDebt, debt);
+    }
+
+    function testShouldRespond_false() public {
+        uint256 healthFactor = 1.1e18; // Above threshold
+        uint256 debt = 100e18;
+        bytes memory collectedData = abi.encode(healthFactor, debt, collateral, userToMonitor);
+        bytes[] memory data = new bytes[](1);
+        data[0] = collectedData;
+
+        (bool should, bytes memory response) = liquidationBait.shouldRespond(data);
+
         assertTrue(!should);
         assertTrue(response.length == 0);
     }
